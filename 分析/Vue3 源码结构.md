@@ -1,5 +1,7 @@
 #	Vue
 
+![](https://raw.githubusercontent.com/qiulengshuo/images/master/Vue3%20%E6%BA%90%E7%A0%81%E7%BB%93%E6%9E%84%E5%88%86%E6%9E%90.png)
+
 集合了 @vue/compiler-dom(编译时) 和 @vue/runtime-dom(基于响应式的运行时) 的输出。
 
 ##	@vue/compiler-dom
