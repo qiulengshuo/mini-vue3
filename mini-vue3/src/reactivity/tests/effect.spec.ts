@@ -71,7 +71,9 @@ describe('effect', () => {
     expect(dummy).toBe(2);
     // 执行 stop 函数，停止对 effect fn 派发更新
     stop(runner);
-    obj.prop = 3;
+    // obj.prop = 3;
+    obj.prop++;
+    console.log(dummy)
     expect(dummy).toBe(2);
 
     // 手动触发 runner，也就是 effect.run 。

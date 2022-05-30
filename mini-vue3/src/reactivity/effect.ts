@@ -1,5 +1,6 @@
 import { extend } from '../shared'
 
+let shouldTrack = false
 // 包含参数函数的 effect 实例
 let activeEffect
 // Effect 类
@@ -12,15 +13,24 @@ class ReactiveEffect {
     this._fn = fn
   }
   run() {
+    // 已经stop过，如果想执行runner，直接this._fn
+    if (!this.active) {
+      return this._fn()
+    }
+    // 没有stop过，需要收集，shouldTrack = true。
+    shouldTrack = true
     activeEffect = this
-    return this._fn()
+    const res = this._fn()
+    shouldTrack = false
+
+    return res
   }
   // 清空 effect 并且 执行用户传入的 onStop。
   stop() {
     // 利用 active 做优化，如果清空过就不需要进入判断逻辑。
-    if(this.active) {
+    if (this.active) {
       cleanupEffect(this)
-      if(this.onStop) {
+      if (this.onStop) {
         this.onStop()
       }
       this.active = false
@@ -28,11 +38,12 @@ class ReactiveEffect {
   }
 }
 
-// 清空 effect 
+// 清空 effect
 function cleanupEffect(effect) {
   effect.deps.forEach((dep) => {
     dep.delete(effect)
   })
+  effect.deps.length = 0
 }
 
 // 向外暴露的 effect 函数
@@ -51,6 +62,7 @@ export function effect(fn, options: any = {}) {
 // target : depsMap( key : set(fn) )
 let targetMap = new Map()
 export function track(target, key) {
+  if (!isTracking()) return
   // 收集 target 对应的 属性的map
   let depsMap = targetMap.get(target)
   if (!depsMap) {
@@ -65,8 +77,8 @@ export function track(target, key) {
     depsMap.set(key, dep)
   }
 
-  // 如果执行单纯的 get 操作，并不需要去操作 effect 相关逻辑
-  if (!activeEffect) return
+  // 如果执行单纯的 get 操作，并不需要去操作 effect 相关逻辑，同时防止二次收集dep。
+  if(dep.has(activeEffect)) return
   dep.add(activeEffect)
   activeEffect.deps.push(dep)
 }
@@ -89,4 +101,8 @@ export function trigger(target, key) {
 export function stop(runner) {
   // 实际上就是调用了 effect 实例的 stop 方法。
   runner.effect.stop()
+}
+
+function isTracking() {
+  return activeEffect !== undefined && shouldTrack
 }

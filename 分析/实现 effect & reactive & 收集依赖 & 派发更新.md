@@ -4,6 +4,26 @@
 
 ![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220528204400.png)
 
+##	Readonly
+
+只读的 Proxy 对象，不能被修改，当 set 的时候，会发出警告 console.warn。
+
+![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220530214103.png)
+
+##	isReactive
+
+判断是不是 Reactive 转化的 Proxy 对象。
+
+![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220530214211.png)
+
+![image-20220530214323230](C:\Users\HP\AppData\Roaming\Typora\typora-user-images\image-20220530214323230.png)
+
+##	isReadonly
+
+判断是不是 Readonly 转化的 Proxy 对象。
+
+![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220530214508.png)
+
 #	effect
 
 1. 首次调用，执行参数里面的函数触发 Proxy 里的 track 收集依赖。
@@ -45,6 +65,18 @@
 用来添加 target -> key -> fn 的依赖。
 
 ![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220528204500.png)
+
+##	优化 stop 函数调用后的 依赖收集
+
+只有当调用 effect.run 并且没有被 stop 的 effect（active 为 true）才能被收集。
+
+> 平时单纯去 get 一个对象的属性（ 比如打印对象的属性 obj.prop ），并不需要做依赖收集。
+
+![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220530215457.png)
+
+![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220530215641.png)
+
+![image-20220530215537995](C:\Users\HP\AppData\Roaming\Typora\typora-user-images\image-20220530215537995.png)
 
 #	trigger
 

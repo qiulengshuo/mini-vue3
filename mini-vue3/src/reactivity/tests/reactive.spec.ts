@@ -1,4 +1,4 @@
-import { reactive } from '../reactive'
+import { isReactive, isReadonly, reactive } from '../reactive'
 
 describe('reactive', () => {
   it('happy path', () => {
@@ -6,5 +6,7 @@ describe('reactive', () => {
     const original = { foo: 1 }
     const observed = reactive(original)
     expect(original).not.toBe(observed)
+    expect(isReactive(observed)).toBe(true)
+    expect(isReadonly(original)).toBe(false)
   })
 })
