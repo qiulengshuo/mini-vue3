@@ -8,6 +8,8 @@
 
 只读的 Proxy 对象，不能被修改，当 set 的时候，会发出警告 console.warn。
 
+> 不需要收集依赖，因为不能被修改，所以触发不了更新依赖的逻辑。
+
 ![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220530214103.png)
 
 ##	isReactive
@@ -23,6 +25,24 @@
 判断是不是 Readonly 转化的 Proxy 对象。
 
 ![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220530214508.png)
+
+##	嵌套对象 深度监听
+
+当 get 上层对象的时候，判断下一层结果如果是对象，就去返回 proxy 对象。
+
+![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220531200438.png)
+
+##	shallowReadonly
+
+实现表层的只读 proxy 对象。传入 shallow 参数，为 true 代表只读，直接返回即可。
+
+![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220531200504.png)
+
+##	isProxy
+
+如果 isReactive( ) 或 isReadonly( ) 为true，那么它就是一个 proxy 对象。
+
+![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220531200527.png)
 
 #	effect
 
@@ -59,6 +79,14 @@
 ##	实现 effect 的第二个可选参数对象中的 onStop 功能
 
 用户传入 onStop 函数，实际上就是当执行 stop 函数的时候，里面就会去执行 onStop 函数。
+
+#	ref
+
+每一个 ref 都来自一个 RefImpl 类。有 get value 方法和 set value 方法，当 get 的时候进行收集依赖，一个 ref 对应一个 dep 集合即可，相当于对象的一个 key 对应一个 Set 。
+
+> 为了深度监听，对传入的对象实现了 reactive；为了避免设置重复的值然后频繁触发更新，需要用 rawValue 存储旧值(主要是对对象的存储)，然后对新旧值进行对比，不同才去更新依赖。
+
+![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220531200635.png)
 
 #	track
 

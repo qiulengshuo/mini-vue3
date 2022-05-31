@@ -77,8 +77,12 @@ export function track(target, key) {
     depsMap.set(key, dep)
   }
 
+  trackEffects(dep)
+}
+
+export function trackEffects(dep) {
   // 如果执行单纯的 get 操作，并不需要去操作 effect 相关逻辑，同时防止二次收集dep。
-  if(dep.has(activeEffect)) return
+  if (dep.has(activeEffect)) return
   dep.add(activeEffect)
   activeEffect.deps.push(dep)
 }
@@ -87,6 +91,11 @@ export function track(target, key) {
 export function trigger(target, key) {
   const depsMap = targetMap.get(target)
   const dep = depsMap.get(key)
+  
+  triggerEffects(dep)
+}
+
+export function triggerEffects(dep) {
   // 循环触发 effect 参数函数
   for (const effect of dep) {
     // 优先执行 scheduler
@@ -103,6 +112,6 @@ export function stop(runner) {
   runner.effect.stop()
 }
 
-function isTracking() {
+export function isTracking() {
   return activeEffect !== undefined && shouldTrack
 }

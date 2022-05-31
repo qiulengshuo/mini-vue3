@@ -1,4 +1,4 @@
-import { readonly, isReadonly } from '../reactive'
+import { readonly, isReadonly, isProxy } from '../reactive'
 
 describe('readonly', () => {
   it('should make nested object readonly', () => {
@@ -6,9 +6,15 @@ describe('readonly', () => {
     const wrapped = readonly(original)
     // 只读对象，不能修改。
     expect(wrapped).not.toBe(original)
-    expect(isReadonly(wrapped)).toBe(true)
-    expect(isReadonly(original)).toBe(false)
     expect(wrapped.foo).toBe(1)
+    expect(isReadonly(wrapped)).toBe(true)
+    // 只读对象具有嵌套特性。
+    expect(isReadonly(wrapped.bar)).toBe(true)
+    expect(isReadonly(original.bar)).toBe(false)
+    expect(isReadonly(original)).toBe(false)
+    // 基于 Proxy
+    expect(isProxy(wrapped)).toBe(true)
+    
   })
 
   it('should call console warn when set', () => {
