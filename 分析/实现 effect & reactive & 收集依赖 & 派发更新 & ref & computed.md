@@ -108,6 +108,16 @@
 
 ![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220601222434.png)
 
+#	computed
+
+1. 跟 ref 实现原理一样，需要 .value 去得到计算属性的值。
+2. 收集依赖派发更新和 effect 一样。
+3. 有 dirty 变量作为缓存标记。
+4. computed( ) 定义的时候不会主动去触发。
+5. 当依赖更新，由于设置了 scheduler，不会触发 fn 也就是 getter。
+
+![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220601223133.png)
+
 #	track
 
 用来添加 target -> key -> fn 的依赖。
@@ -124,7 +134,7 @@
 
 ![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220530215641.png)
 
-![image-20220530215537995](C:\Users\HP\AppData\Roaming\Typora\typora-user-images\image-20220530215537995.png)
+![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220601225746.png)
 
 #	trigger
 
