@@ -6,6 +6,7 @@ class RefImpl {
   public dep
   private _rawValue: any
   private _value: any
+  public __v_isRef = true
   constructor(value) {
     // 保留原始值  方便后面比较新旧值
     // 主要是对对象的处理，如果.value改为旧对象
@@ -33,6 +34,29 @@ class RefImpl {
 
 export function ref(value) {
   return new RefImpl(value)
+}
+
+export function isRef(ref) {
+  return !!ref.__v_isRef
+}
+
+export function unRef(ref) {
+  return isRef(ref) ? ref.value : ref
+}
+
+export function proxyRefs(objectWithRefs) {
+  return new Proxy(objectWithRefs, {
+    get(target, key) {
+      return unRef(Reflect.get(target, key))
+    },
+    set(target, key, value) {
+      if(isRef(target[key]) && !isRef(value)) {
+        return target[key].value = value
+      }else {
+        return Reflect.set(target, key, value)
+      }
+    },
+  })
 }
 
 function trackRefValue(ref) {

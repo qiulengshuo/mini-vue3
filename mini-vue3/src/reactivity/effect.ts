@@ -4,7 +4,7 @@ let shouldTrack = false
 // 包含参数函数的 effect 实例
 let activeEffect
 // Effect 类
-class ReactiveEffect {
+export class ReactiveEffect {
   private _fn: any
   onStop?: () => void
   active = true

@@ -88,6 +88,26 @@
 
 ![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220531200635.png)
 
+##	isRef
+
+判断是不是由 ref 返回。
+
+> 添加一个 key 作为标识即可。
+
+![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220601222108.png)
+
+##	unRef
+
+省去 .value 直接获得对应的值。
+
+![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220601222225.png)
+
+##	proxyRefs
+
+传入一个对象，如果对象 key 对应的 value 是一个 ref，那么在 get 的时候不用 .value，在 set 的时候如果是值类型就需要连同 ref.value 也修改，如果是 ref 直接替换原来的 ref 即可。
+
+![](https://raw.githubusercontent.com/qiulengshuo/images/master/20220601222434.png)
+
 #	track
 
 用来添加 target -> key -> fn 的依赖。
