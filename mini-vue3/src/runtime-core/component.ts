@@ -39,7 +39,5 @@ function handleSetupResult(instance, setupResult: any) {
 function finishComponentSetup(instance) {
   const Component = instance.type
   // 挂载 render 到组件实例上来
-  if (Component.render) {
-    instance.render = Component.render
-  }
+  instance.render = Component.render
 }
