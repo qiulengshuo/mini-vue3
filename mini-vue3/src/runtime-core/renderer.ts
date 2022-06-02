@@ -1,20 +1,54 @@
 import { createComponentInstance, setupComponent } from './component'
+import { isObject } from '../shared'
+
 export function render(vnode, container) {
   patch(vnode, container)
 }
 
 function patch(vnode, container) {
-  // TODO 判断vnode 是不是一个 element
-  // 是 element 那么就应该处理 element
-  // 思考题： 如何去区分是 element 还是 component 类型呢？
-  // processElement();
-
-  // 判断 当前 vnode 类型是组件。
-  processComponent(vnode, container)
+  // 判断 vnode 是不是一个 element
+  if (typeof vnode.type === 'string') {
+    processElement(vnode, container)
+  } else if (isObject(vnode.type)) {
+    // 判断 当前 vnode 类型是组件。
+    processComponent(vnode, container)
+  }
 }
 function processComponent(vnode: any, container: any) {
   // 一开始 初始化 组件vnode
   mountComponent(vnode, container)
+}
+
+function processElement(vnode: any, container: any) {
+  mountElement(vnode, container)
+}
+
+function mountElement(vnode: any, container) {
+  const el = document.createElement(vnode.type)
+
+  // children
+  const { children } = vnode
+  if (typeof children === 'string') {
+    el.textContent = children
+  } else if (Array.isArray(children)) {
+    mountChildren(vnode, el)
+  }
+
+  // props
+  const { props } = vnode
+  for (const key in props) {
+    const val = props[key]
+    el.setAttribute(key, val)
+  }
+
+  container.append(el)
+}
+
+function mountChildren(vnode, container) {
+  console.log(vnode)
+  vnode.children.forEach((v) => {
+    patch(v, container)
+  })
 }
 
 function mountComponent(vnode: any, container) {

@@ -41,33 +41,67 @@ function finishComponentSetup(instance) {
     instance.render = Component.render;
 }
 
+// 语义化：浅拷贝继承对象属性
+const isObject = function (val) {
+    return val !== null && typeof val === "object";
+};
+
 function render(vnode, container) {
-    patch(vnode);
+    patch(vnode, container);
 }
 function patch(vnode, container) {
-    // TODO 判断vnode 是不是一个 element
-    // 是 element 那么就应该处理 element
-    // 思考题： 如何去区分是 element 还是 component 类型呢？
-    // processElement();
-    // 判断 当前 vnode 类型是组件。
-    processComponent(vnode);
+    // 判断 vnode 是不是一个 element
+    if (typeof vnode.type === 'string') {
+        processElement(vnode, container);
+    }
+    else if (isObject(vnode.type)) {
+        // 判断 当前 vnode 类型是组件。
+        processComponent(vnode, container);
+    }
 }
 function processComponent(vnode, container) {
     // 一开始 初始化 组件vnode
-    mountComponent(vnode);
+    mountComponent(vnode, container);
+}
+function processElement(vnode, container) {
+    mountElement(vnode, container);
+}
+function mountElement(vnode, container) {
+    const el = document.createElement(vnode.type);
+    // children
+    const { children } = vnode;
+    if (typeof children === 'string') {
+        el.textContent = children;
+    }
+    else if (Array.isArray(children)) {
+        mountChildren(vnode, el);
+    }
+    // props
+    const { props } = vnode;
+    for (const key in props) {
+        const val = props[key];
+        el.setAttribute(key, val);
+    }
+    container.append(el);
+}
+function mountChildren(vnode, container) {
+    console.log(vnode);
+    vnode.children.forEach((v) => {
+        patch(v, container);
+    });
 }
 function mountComponent(vnode, container) {
     // 创建组件实例
     const instance = createComponentInstance(vnode);
     // 配置组件实例 props slots setup()
     setupComponent(instance);
-    setupRenderEffect(instance);
+    setupRenderEffect(instance, container);
 }
 function setupRenderEffect(instance, container) {
     // 调用组件内部的 render 函数(用户传入的 render 函数)
     const subTree = instance.render();
     // vnode -> DOM
-    patch(subTree);
+    patch(subTree, container);
 }
 
 // 创建vnode
@@ -87,7 +121,7 @@ function createApp(rootComponent) {
             // 创建 vnode
             const vnode = createVNode(rootComponent);
             // render 拆箱
-            render(vnode);
+            render(vnode, rootContainer);
         }
     };
 }
