@@ -1,5 +1,5 @@
 import { createComponentInstance, setupComponent } from './component'
-import { isObject } from '../shared'
+import { ShapeFlags } from '../shared/ShapeFlags'
 
 export function render(vnode, container) {
   patch(vnode, container)
@@ -7,9 +7,10 @@ export function render(vnode, container) {
 
 function patch(vnode, container) {
   // 判断 vnode 是不是一个 element
-  if (typeof vnode.type === 'string') {
+  const { shapeFlag } = vnode
+  if (shapeFlag & ShapeFlags.ELEMENT) {
     processElement(vnode, container)
-  } else if (isObject(vnode.type)) {
+  } else if (shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
     // 判断 当前 vnode 类型是组件。
     processComponent(vnode, container)
   }
@@ -24,13 +25,13 @@ function processElement(vnode: any, container: any) {
 }
 
 function mountElement(vnode: any, container) {
-  const el = document.createElement(vnode.type)
+  const el = (vnode.el = document.createElement(vnode.type))
 
   // children
-  const { children } = vnode
-  if (typeof children === 'string') {
+  const { children, shapeFlag } = vnode
+  if (shapeFlag & ShapeFlags.TEXT_CHILDREN) {
     el.textContent = children
-  } else if (Array.isArray(children)) {
+  } else if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
     mountChildren(vnode, el)
   }
 
@@ -45,23 +46,26 @@ function mountElement(vnode: any, container) {
 }
 
 function mountChildren(vnode, container) {
-  console.log(vnode)
   vnode.children.forEach((v) => {
     patch(v, container)
   })
 }
 
-function mountComponent(vnode: any, container) {
+function mountComponent(initialVnode: any, container) {
   // 创建组件实例
-  const instance = createComponentInstance(vnode)
+  const instance = createComponentInstance(initialVnode)
+
   // 配置组件实例 props slots setup()
   setupComponent(instance)
-  setupRenderEffect(instance, container)
+  setupRenderEffect(initialVnode, instance, container)
 }
 
-function setupRenderEffect(instance: any, container) {
+function setupRenderEffect(initialVnode: any, instance: any, container) {
+  const { proxy } = instance
   // 调用组件内部的 render 函数(用户传入的 render 函数)
-  const subTree = instance.render()
+  // 把 render 函数的 this 修改为代理对象
+  const subTree = instance.render.call(proxy)
   // vnode -> DOM
   patch(subTree, container)
+  initialVnode.el = subTree.el
 }
