@@ -1,17 +1,25 @@
-import { PublicInstanceProxyHandlers } from "./componentPublicInstance";
+import { PublicInstanceProxyHandlers } from './componentPublicInstance'
+import { initProps } from './componentProps'
+import { shallowReadonly } from '../reactivity/reactive'
+import { emit } from './componentEmit'
 
 export function createComponentInstance(vnode) {
   const component = {
     vnode,
     type: vnode.type,
     setupState: {},
+    props: {},
+    emit: () => {},
   }
+  // 柯里化先传 component 实例
+  component.emit = emit.bind(null, component) as any
   return component
 }
+
 export function setupComponent(instance) {
   // TODO
-  // initProps()
   // initSlots()
+  initProps(instance, instance.vnode.props)
 
   // 调用setup
   setupStatefulComponent(instance)
@@ -25,7 +33,10 @@ function setupStatefulComponent(instance: any) {
 
   const { setup } = component
   if (setup) {
-    const setupResult = setup()
+    // { emit }
+    const setupResult = setup(shallowReadonly(instance.props), {
+      emit: instance.emit,
+    })
     // 处理 setup 结果
     handleSetupResult(instance, setupResult)
   }
