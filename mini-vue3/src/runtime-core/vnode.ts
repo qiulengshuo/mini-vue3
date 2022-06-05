@@ -1,7 +1,7 @@
 import { ShapeFlags } from '../shared/ShapeFlags'
 
-export const Fragment = Symbol("Fragment")
-export const Text = Symbol("Text")
+export const Fragment = Symbol('Fragment')
+export const Text = Symbol('Text')
 
 // 创建vnode
 export function createVNode(type, props?, children?) {
@@ -9,6 +9,7 @@ export function createVNode(type, props?, children?) {
     type,
     props,
     children,
+    key: props && props.key,
     shapeFlag: getShapeFlag(type),
     el: null,
   }

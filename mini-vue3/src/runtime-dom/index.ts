@@ -18,14 +18,31 @@ function patchProp(el, key, prevVal, nextVal) {
   }
 }
 
-function insert(el, parent) {
-  parent.append(el)
+function insert(child, parent, anchor) {
+  // parent.append(el)
+
+  // 把 child 插入到父元素里面对应的锚点前面。
+  // null 的时候默认添加在后面。
+  parent.insertBefore(child, anchor || null)
+}
+
+function remove(child) {
+  const parent = child.parentNode
+  if (parent) {
+    parent.removeChild(child)
+  }
+}
+
+function setElementText(el, text) {
+  el.textContent = text
 }
 
 const renderer: any = createRenderer({
   createElement,
   patchProp,
   insert,
+  remove,
+  setElementText,
 })
 
 export function createApp(...args) {
