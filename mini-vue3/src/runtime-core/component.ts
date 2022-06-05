@@ -3,6 +3,7 @@ import { initProps } from './componentProps'
 import { shallowReadonly } from '../reactivity/reactive'
 import { emit } from './componentEmit'
 import { initSlots } from './componentSlot'
+import { proxyRefs } from '../reactivity'
 
 export function createComponentInstance(vnode, parent) {
   const component = {
@@ -13,6 +14,8 @@ export function createComponentInstance(vnode, parent) {
     slots: {},
     provides: parent ? parent.provides : {},
     parent,
+    subTree: {},
+    isMounted: false,
     emit: () => {},
   }
   // 柯里化先传 component 实例
@@ -54,7 +57,7 @@ function handleSetupResult(instance, setupResult: any) {
 
   // 如果 setup 返回的结果是 对象
   if (typeof setupResult === 'object') {
-    instance.setupState = setupResult
+    instance.setupState = proxyRefs(setupResult)
   }
   finishComponentSetup(instance)
 }

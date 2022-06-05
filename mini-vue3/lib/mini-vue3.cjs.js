@@ -49,8 +49,12 @@ function renderSlots(slots, name, props) {
 
 // 语义化：浅拷贝继承对象属性
 const extend = Object.assign;
+const EMPTY_OBJ = {};
 const isObject = function (val) {
     return val !== null && typeof val === 'object';
+};
+const hasChanged = function (value, newValue) {
+    return !Object.is(value, newValue);
 };
 const hasOwn = (val, key) => Object.prototype.hasOwnProperty.call(val, key);
 const camelize = (str) => {
@@ -91,9 +95,85 @@ function initProps(instance, rawProps) {
     instance.props = rawProps || {};
 }
 
+let shouldTrack = false;
+// 包含参数函数的 effect 实例
+let activeEffect;
+// Effect 类
+class ReactiveEffect {
+    constructor(fn, scheduler) {
+        this.scheduler = scheduler;
+        this.active = true;
+        this.deps = [];
+        this._fn = fn;
+    }
+    run() {
+        // 已经stop过，如果想执行runner，直接this._fn
+        if (!this.active) {
+            return this._fn();
+        }
+        // 没有stop过，需要收集，shouldTrack = true。
+        shouldTrack = true;
+        activeEffect = this;
+        const res = this._fn();
+        shouldTrack = false;
+        return res;
+    }
+    // 清空 effect 并且 执行用户传入的 onStop。
+    stop() {
+        // 利用 active 做优化，如果清空过就不需要进入判断逻辑。
+        if (this.active) {
+            cleanupEffect(this);
+            if (this.onStop) {
+                this.onStop();
+            }
+            this.active = false;
+        }
+    }
+}
+// 清空 effect
+function cleanupEffect(effect) {
+    effect.deps.forEach((dep) => {
+        dep.delete(effect);
+    });
+    effect.deps.length = 0;
+}
+// 向外暴露的 effect 函数
+function effect(fn, options = {}) {
+    // 传入 scheduler ，合并options
+    const _effect = new ReactiveEffect(fn, options.scheduler);
+    extend(_effect, options);
+    _effect.run();
+    const runner = _effect.run.bind(_effect);
+    runner.effect = _effect;
+    return runner;
+}
 // 收集依赖器
 // target : depsMap( key : set(fn) )
 let targetMap = new Map();
+function track(target, key) {
+    if (!isTracking())
+        return;
+    // 收集 target 对应的 属性的map
+    let depsMap = targetMap.get(target);
+    if (!depsMap) {
+        depsMap = new Map();
+        targetMap.set(target, depsMap);
+    }
+    // 收集属性的 effect 实例集合
+    let dep = depsMap.get(key);
+    if (!dep) {
+        dep = new Set();
+        depsMap.set(key, dep);
+    }
+    trackEffects(dep);
+}
+function trackEffects(dep) {
+    // 如果执行单纯的 get 操作，并不需要去操作 effect 相关逻辑，同时防止二次收集dep。
+    if (dep.has(activeEffect))
+        return;
+    dep.add(activeEffect);
+    activeEffect.deps.push(dep);
+}
 // 触发器
 function trigger(target, key) {
     const depsMap = targetMap.get(target);
@@ -111,6 +191,9 @@ function triggerEffects(dep) {
             effect.run();
         }
     }
+}
+function isTracking() {
+    return activeEffect !== undefined && shouldTrack;
 }
 
 const get = createGetter();
@@ -131,6 +214,10 @@ function createGetter(isReadonly = false, shallow = false) {
         }
         if (isObject(res)) {
             return isReadonly ? readonly(res) : reactive(res);
+        }
+        if (!isReadonly) {
+            // 收集依赖
+            track(target, key);
         }
         return res;
     };
@@ -206,6 +293,65 @@ function normalizeSlotValue(value) {
     return Array.isArray(value) ? value : [value];
 }
 
+class RefImpl {
+    constructor(value) {
+        this.__v_isRef = true;
+        // 保留原始值  方便后面比较新旧值
+        // 主要是对对象的处理，如果.value改为旧对象
+        // 而.value的对象又被proxy了，proxy对象和旧对象不一样，会被误认为两个对象。
+        this._rawValue = value;
+        // 对 对象 进行 reactive 响应式，收集更新依赖。
+        // 不然属性改了，却没有更新依赖。
+        this._value = convert(value);
+        this.dep = new Set();
+    }
+    get value() {
+        // 收集依赖 effect。
+        trackRefValue(this);
+        return this._value;
+    }
+    set value(newValue) {
+        // 更新才去触发依赖。
+        if (hasChanged(this._rawValue, newValue)) {
+            this._value = convert(newValue);
+            this._rawValue = newValue;
+            triggerEffects(this.dep);
+        }
+    }
+}
+function ref(value) {
+    return new RefImpl(value);
+}
+function isRef(ref) {
+    return !!ref.__v_isRef;
+}
+function unRef(ref) {
+    return isRef(ref) ? ref.value : ref;
+}
+function proxyRefs(objectWithRefs) {
+    return new Proxy(objectWithRefs, {
+        get(target, key) {
+            return unRef(Reflect.get(target, key));
+        },
+        set(target, key, value) {
+            if (isRef(target[key]) && !isRef(value)) {
+                return target[key].value = value;
+            }
+            else {
+                return Reflect.set(target, key, value);
+            }
+        },
+    });
+}
+function trackRefValue(ref) {
+    if (isTracking()) {
+        trackEffects(ref.dep);
+    }
+}
+function convert(value) {
+    return isObject(value) ? reactive(value) : value;
+}
+
 function createComponentInstance(vnode, parent) {
     const component = {
         vnode,
@@ -215,6 +361,8 @@ function createComponentInstance(vnode, parent) {
         slots: {},
         provides: parent ? parent.provides : {},
         parent,
+        subTree: {},
+        isMounted: false,
         emit: () => { },
     };
     // 柯里化先传 component 实例
@@ -251,7 +399,7 @@ function handleSetupResult(instance, setupResult) {
     // TODO function
     // 如果 setup 返回的结果是 对象
     if (typeof setupResult === 'object') {
-        instance.setupState = setupResult;
+        instance.setupState = proxyRefs(setupResult);
     }
     finishComponentSetup(instance);
 }
@@ -318,43 +466,86 @@ function createAppAPI(render) {
 function createRenderer(options) {
     const { createElement: hostCreateElement, patchProp: hostPatchProp, insert: hostInsert, } = options;
     function render(vnode, container) {
-        patch(vnode, container, null);
+        patch(null, vnode, container, null);
     }
-    function patch(vnode, container, parentComponent) {
+    // n1 老vnode
+    // n2 新vnode
+    function patch(n1, n2, container, parentComponent) {
         // 判断 vnode 是不是一个 element
-        const { type, shapeFlag } = vnode;
+        const { type, shapeFlag } = n2;
         switch (type) {
             case Fragment:
-                processFragment(vnode, container, parentComponent);
+                processFragment(n1, n2, container, parentComponent);
                 break;
             case Text:
-                processText(vnode, container);
+                processText(n1, n2, container);
                 break;
             default:
                 if (shapeFlag & 1 /* ShapeFlags.ELEMENT */) {
-                    processElement(vnode, container, parentComponent);
+                    processElement(n1, n2, container, parentComponent);
                 }
                 else if (shapeFlag & 2 /* ShapeFlags.STATEFUL_COMPONENT */) {
                     // 判断 当前 vnode 类型是组件。
-                    processComponent(vnode, container, parentComponent);
+                    processComponent(n1, n2, container, parentComponent);
                 }
                 break;
         }
     }
-    function processFragment(vnode, container, parentComponent) {
-        mountChildren(vnode, container, parentComponent);
+    function processFragment(n1, n2, container, parentComponent) {
+        mountChildren(n2, container, parentComponent);
     }
-    function processText(vnode, container) {
-        const { children } = vnode;
-        const textNode = (vnode.el = document.createTextNode(children));
+    function processText(n1, n2, container) {
+        const { children } = n2;
+        const textNode = (n2.el = document.createTextNode(children));
         container.append(textNode);
     }
-    function processComponent(vnode, container, parentComponent) {
+    function processComponent(n1, n2, container, parentComponent) {
         // 一开始 初始化 组件vnode
-        mountComponent(vnode, container, parentComponent);
+        mountComponent(n2, container, parentComponent);
     }
-    function processElement(vnode, container, parentComponent) {
-        mountElement(vnode, container, parentComponent);
+    function processElement(n1, n2, container, parentComponent) {
+        if (!n1) {
+            mountElement(n2, container, parentComponent);
+        }
+        else {
+            patchElement(n1, n2);
+        }
+    }
+    function patchElement(n1, n2, container) {
+        console.log('patchElement');
+        console.log('n1', n1);
+        console.log('n2', n2);
+        // 获取旧新 vnode 的 props
+        const oldProps = n1.props || EMPTY_OBJ;
+        const newProps = n2.props || EMPTY_OBJ;
+        // 更新 vnode 走 patchElement 逻辑，并没有 el。
+        const el = (n2.el = n1.el);
+        patchProps(el, oldProps, newProps);
+    }
+    function patchProps(el, oldProps, newProps) {
+        // 旧新 props 对象不同，才去更新。
+        if (oldProps !== newProps) {
+            // 先在 newProps 对象里面遍历
+            // 1. 两值不同，更新即可。
+            // 2. 新 prop null 或 undefined，删除属性。
+            // 3. 新增属性。
+            for (const key in newProps) {
+                const prevProp = oldProps[key];
+                const nextProp = newProps[key];
+                if (prevProp !== nextProp) {
+                    hostPatchProp(el, key, prevProp, nextProp);
+                }
+            }
+            // 再去 oldProps 对象里面遍历
+            // 1. 只需要删除 newProps 对象里面没有的。
+            if (oldProps !== EMPTY_OBJ) {
+                for (const key in oldProps) {
+                    if (!(key in newProps)) {
+                        hostPatchProp(el, key, oldProps[key], null);
+                    }
+                }
+            }
+        }
     }
     function mountElement(vnode, container, parentComponent) {
         // const el = (vnode.el = document.createElement(vnode.type))
@@ -378,14 +569,14 @@ function createRenderer(options) {
             // } else {
             //   el.setAttribute(key, val)
             // }
-            hostPatchProp(el, key, val);
+            hostPatchProp(el, key, null, val);
         }
         // container.append(el)
         hostInsert(el, container);
     }
     function mountChildren(vnode, container, parentComponent) {
         vnode.children.forEach((v) => {
-            patch(v, container, parentComponent);
+            patch(null, v, container, parentComponent);
         });
     }
     function mountComponent(initialVnode, container, parentComponent) {
@@ -396,13 +587,30 @@ function createRenderer(options) {
         setupRenderEffect(initialVnode, instance, container);
     }
     function setupRenderEffect(initialVnode, instance, container) {
-        const { proxy } = instance;
-        // 调用组件内部的 render 函数(用户传入的 render 函数)
-        // 把 render 函数的 this 修改为代理对象
-        const subTree = instance.render.call(proxy);
-        // vnode -> DOM
-        patch(subTree, container, instance);
-        initialVnode.el = subTree.el;
+        effect(() => {
+            if (!instance.isMounted) {
+                console.log('init');
+                const { proxy } = instance;
+                // 调用组件内部的 render 函数(用户传入的 render 函数)
+                // 把 render 函数的 this 修改为代理对象
+                const subTree = (instance.subTree = instance.render.call(proxy));
+                // vnode -> DOM
+                patch(null, subTree, container, instance);
+                initialVnode.el = subTree.el;
+                instance.isMounted = true;
+            }
+            else {
+                console.log('update');
+                const { proxy } = instance;
+                // 调用组件内部的 render 函数(用户传入的 render 函数)
+                // 把 render 函数的 this 修改为代理对象
+                const subTree = instance.render.call(proxy);
+                const prevSubTree = instance.subTree;
+                instance.subTree = subTree;
+                // vnode -> DOM
+                patch(prevSubTree, subTree, container, instance);
+            }
+        });
     }
     return {
         createApp: createAppAPI(render),
@@ -412,14 +620,19 @@ function createRenderer(options) {
 function createElement(type) {
     return document.createElement(type);
 }
-function patchProp(el, key, val) {
+function patchProp(el, key, prevVal, nextVal) {
     const isOn = (key) => /^on[A-Z]/.test(key);
     if (isOn(key)) {
         const event = key.slice(2).toLowerCase();
-        el.addEventListener(event, val);
+        el.addEventListener(event, nextVal);
     }
     else {
-        el.setAttribute(key, val);
+        if (nextVal === undefined || nextVal === null) {
+            el.removeAttribute(key);
+        }
+        else {
+            el.setAttribute(key, nextVal);
+        }
     }
 }
 function insert(el, parent) {
@@ -441,4 +654,6 @@ exports.getCurrentInstance = getCurrentInstance;
 exports.h = h;
 exports.inject = inject;
 exports.provide = provide;
+exports.proxyRefs = proxyRefs;
+exports.ref = ref;
 exports.renderSlots = renderSlots;
