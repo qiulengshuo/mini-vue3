@@ -185,6 +185,96 @@ export function createRenderer(options) {
       }
       // 不同的 node 在中间。
     } else {
+      let s1 = i
+      let s2 = i
+
+      const toBePatched = e2 - s2 + 1
+      let patched = 0
+
+      // newVnode: key -> Index 的映射，空间换时间，查找 O(1)。
+      const keyToNewIndexMap = new Map()
+      for (let i = s2; i <= e2; i++) {
+        const nextChild = c2[i]
+        keyToNewIndexMap.set(nextChild.key, i)
+      }
+
+      // newVnode: index -> oldVnode: index
+      // 从新索引到旧索引的映射，查找旧索引中的最长递增子序列。
+      // 该子序列中的元素相对位置保持不变，只去移动其他旧元素。
+      const newIndexToOldIndexMap = new Array(toBePatched)
+      let moved = false
+      // 优化点：
+      // 如果在删除逻辑查找 newIndex 的时候，index 是不断增大的,
+      // 那么不需要去移动(查找最长递增子序列...)。
+      let maxNewIndexSoFar = 0
+      for (let i = 0; i < toBePatched; i++) newIndexToOldIndexMap[i] = 0
+
+      for (let i = s1; i <= e1; i++) {
+        const prevChild = c1[i]
+
+        // 已经 patch 数量大于等于将去 patch 的数量。
+        // 直接删除。
+        if (patched >= toBePatched) {
+          hostRemove(prevChild.el)
+          continue
+        }
+
+        // 遍历老 vnode，找到对应新 vnode 中的 index。
+        let newIndex
+        if (prevChild.key != null) {
+          newIndex = keyToNewIndexMap.get(prevChild.key)
+        } else {
+          for (let j = s2; j <= e2; j++) {
+            if (isSomeVNodeType(prevChild, c2[j])) {
+              newIndex = j
+              break
+            }
+          }
+        }
+
+        if (newIndex === undefined) {
+          hostRemove(prevChild.el)
+        } else {
+          if (newIndex >= maxNewIndexSoFar) {
+            maxNewIndexSoFar = newIndex
+          } else {
+            moved = true
+          }
+          // 存储 newIndex -> oldIndex
+          newIndexToOldIndexMap[newIndex - s2] = i + 1
+          patch(prevChild, c2[newIndex], container, parentComponent, null)
+          patched++
+        }
+      }
+
+      // 计算老 vnode index 的最长递增子序列，
+      // 得到新 vnode index 下标。
+      const increasingNewIndexSequence = moved
+        ? getSequence(newIndexToOldIndexMap)
+        : []
+      let j = increasingNewIndexSequence.length - 1
+
+      for (let i = toBePatched - 1; i >= 0; i--) {
+        const nextIndex = i + s2
+        const nextChild = c2[nextIndex]
+        const anchor = nextIndex + 1 < l2 ? c2[nextIndex + 1].el : null
+
+        if (newIndexToOldIndexMap[i] === 0) {
+          // 值为 0，说明在旧 vnode 没有这个节点
+          // 直接创建
+          patch(null, nextChild, container, parentComponent, anchor)
+        } else if (moved) {
+          // 一旦最长递增子序列遍历完了
+          // 或者最长递增子序列对应下标和实际遍历下标不一样
+          // 执行移动逻辑
+          // 否则j--继续遍历
+          if (j < 0 || i !== increasingNewIndexSequence[j]) {
+            hostInsert(nextChild.el, container, anchor)
+          } else {
+            j--
+          }
+        }
+      }
     }
   }
 
@@ -310,4 +400,45 @@ export function createRenderer(options) {
   return {
     createApp: createAppAPI(render),
   }
+}
+
+function getSequence(arr) {
+  const p = arr.slice()
+  const result = [0]
+  let i, j, u, v, c
+  const len = arr.length
+  for (i = 0; i < len; i++) {
+    const arrI = arr[i]
+    if (arrI !== 0) {
+      j = result[result.length - 1]
+      if (arr[j] < arrI) {
+        p[i] = j
+        result.push(i)
+        continue
+      }
+      u = 0
+      v = result.length - 1
+      while (u < v) {
+        c = (u + v) >> 1
+        if (arr[result[c]] < arrI) {
+          u = c + 1
+        } else {
+          v = c
+        }
+      }
+      if (arrI < arr[result[u]]) {
+        if (u > 0) {
+          p[i] = result[u - 1]
+        }
+        result[u] = i
+      }
+    }
+  }
+  u = result.length
+  v = result[u - 1]
+  while (u-- > 0) {
+    result[u] = v
+    v = p[v]
+  }
+  return result
 }
