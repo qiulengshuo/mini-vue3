@@ -4,6 +4,7 @@ import { Fragment, Text } from './vnode'
 import { createAppAPI } from './createApp'
 import { effect } from '../reactivity/effect'
 import { EMPTY_OBJ } from '../shared'
+import { shouldUpdateComponent } from './componentUpdateUtil'
 
 export function createRenderer(options) {
   const {
@@ -64,8 +65,28 @@ export function createRenderer(options) {
     parentComponent,
     anchor
   ) {
-    // 一开始 初始化 组件vnode
-    mountComponent(n2, container, parentComponent, anchor)
+    if (!n1) {
+      // 一开始 初始化 组件vnode
+      mountComponent(n2, container, parentComponent, anchor)
+    } else {
+      // 更新 component
+      updateComponent(n1, n2)
+    }
+  }
+
+  function updateComponent(n1, n2) {
+    const instance = (n2.component = n1.component)
+    // 通过 props 判断需不需要更新
+    if (shouldUpdateComponent(n1, n2)) {
+      // 设置新 vnode
+      // 执行更新逻辑
+      instance.next = n2
+      instance.update()
+    } else {
+      // 如果不需要更新，直接更换 vnode
+      n2.el = n1.el
+      instance.vnode = n2
+    }
   }
 
   function processElement(
@@ -356,7 +377,10 @@ export function createRenderer(options) {
     anchor
   ) {
     // 创建组件实例
-    const instance = createComponentInstance(initialVnode, parentComponent)
+    const instance = (initialVnode.component = createComponentInstance(
+      initialVnode,
+      parentComponent
+    ))
 
     // 配置组件实例 props slots setup()
     setupComponent(instance)
@@ -369,7 +393,7 @@ export function createRenderer(options) {
     container,
     anchor
   ) {
-    effect(() => {
+    instance.update = effect(() => {
       if (!instance.isMounted) {
         console.log('init')
 
@@ -384,6 +408,13 @@ export function createRenderer(options) {
         instance.isMounted = true
       } else {
         console.log('update')
+
+        // 更新 vnode 和 props
+        const { next, vnode } = instance
+        if (next) {
+          next.el = vnode.el
+          updateComponentPreRender(instance, next)
+        }
 
         const { proxy } = instance
         // 调用组件内部的 render 函数(用户传入的 render 函数)
@@ -400,6 +431,13 @@ export function createRenderer(options) {
   return {
     createApp: createAppAPI(render),
   }
+}
+
+function updateComponentPreRender(instance, nextVNode) {
+  instance.vnode = nextVNode
+  instance.next = null
+
+  instance.props = nextVNode.props
 }
 
 function getSequence(arr) {

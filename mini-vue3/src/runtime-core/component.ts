@@ -8,6 +8,7 @@ import { proxyRefs } from '../reactivity'
 export function createComponentInstance(vnode, parent) {
   const component = {
     vnode,
+    next: null,
     type: vnode.type,
     setupState: {},
     props: {},

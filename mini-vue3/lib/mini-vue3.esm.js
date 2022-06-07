@@ -9,6 +9,7 @@ function createVNode(type, props, children) {
         key: props && props.key,
         shapeFlag: getShapeFlag(type),
         el: null,
+        component: null,
     };
     if (typeof children === 'string') {
         vnode.shapeFlag |= 4 /* ShapeFlags.TEXT_CHILDREN */;
@@ -68,7 +69,8 @@ const toHandlerKey = (str) => {
 
 const publicPropertiesMap = {
     $el: (i) => i.vnode.el,
-    $slots: (i) => i.slots
+    $slots: (i) => i.slots,
+    $props: (i) => i.props,
 };
 const PublicInstanceProxyHandlers = {
     get({ _: instance }, key) {
@@ -352,6 +354,7 @@ function convert(value) {
 function createComponentInstance(vnode, parent) {
     const component = {
         vnode,
+        next: null,
         type: vnode.type,
         setupState: {},
         props: {},
@@ -460,6 +463,17 @@ function createAppAPI(render) {
     };
 }
 
+function shouldUpdateComponent(prevVNode, nextVNode) {
+    const { props: prevProps } = prevVNode;
+    const { props: nextProps } = nextVNode;
+    for (const key in nextProps) {
+        if (nextProps[key] !== prevProps[key]) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function createRenderer(options) {
     const { createElement: hostCreateElement, patchProp: hostPatchProp, insert: hostInsert, remove: hostRemove, setElementText: hostSetElementText, } = options;
     function render(vnode, container) {
@@ -497,8 +511,29 @@ function createRenderer(options) {
         container.append(textNode);
     }
     function processComponent(n1, n2, container, parentComponent, anchor) {
-        // 一开始 初始化 组件vnode
-        mountComponent(n2, container, parentComponent, anchor);
+        if (!n1) {
+            // 一开始 初始化 组件vnode
+            mountComponent(n2, container, parentComponent, anchor);
+        }
+        else {
+            // 更新 component
+            updateComponent(n1, n2);
+        }
+    }
+    function updateComponent(n1, n2) {
+        const instance = (n2.component = n1.component);
+        // 通过 props 判断需不需要更新
+        if (shouldUpdateComponent(n1, n2)) {
+            // 设置新 vnode
+            // 执行更新逻辑
+            instance.next = n2;
+            instance.update();
+        }
+        else {
+            // 如果不需要更新，直接更换 vnode
+            n2.el = n1.el;
+            instance.vnode = n2;
+        }
     }
     function processElement(n1, n2, container, parentComponent, anchor) {
         if (!n1) {
@@ -651,11 +686,14 @@ function createRenderer(options) {
                     else {
                         moved = true;
                     }
+                    // 存储 newIndex -> oldIndex
                     newIndexToOldIndexMap[newIndex - s2] = i + 1;
                     patch(prevChild, c2[newIndex], container, parentComponent, null);
                     patched++;
                 }
             }
+            // 计算老 vnode index 的最长递增子序列，
+            // 得到新 vnode index 下标。
             const increasingNewIndexSequence = moved
                 ? getSequence(newIndexToOldIndexMap)
                 : [];
@@ -665,9 +703,15 @@ function createRenderer(options) {
                 const nextChild = c2[nextIndex];
                 const anchor = nextIndex + 1 < l2 ? c2[nextIndex + 1].el : null;
                 if (newIndexToOldIndexMap[i] === 0) {
+                    // 值为 0，说明在旧 vnode 没有这个节点
+                    // 直接创建
                     patch(null, nextChild, container, parentComponent, anchor);
                 }
                 else if (moved) {
+                    // 一旦最长递增子序列遍历完了
+                    // 或者最长递增子序列对应下标和实际遍历下标不一样
+                    // 执行移动逻辑
+                    // 否则j--继续遍历
                     if (j < 0 || i !== increasingNewIndexSequence[j]) {
                         hostInsert(nextChild.el, container, anchor);
                     }
@@ -743,13 +787,13 @@ function createRenderer(options) {
     }
     function mountComponent(initialVnode, container, parentComponent, anchor) {
         // 创建组件实例
-        const instance = createComponentInstance(initialVnode, parentComponent);
+        const instance = (initialVnode.component = createComponentInstance(initialVnode, parentComponent));
         // 配置组件实例 props slots setup()
         setupComponent(instance);
         setupRenderEffect(initialVnode, instance, container, anchor);
     }
     function setupRenderEffect(initialVnode, instance, container, anchor) {
-        effect(() => {
+        instance.update = effect(() => {
             if (!instance.isMounted) {
                 console.log('init');
                 const { proxy } = instance;
@@ -763,6 +807,12 @@ function createRenderer(options) {
             }
             else {
                 console.log('update');
+                // 更新 vnode 和 props
+                const { next, vnode } = instance;
+                if (next) {
+                    next.el = vnode.el;
+                    updateComponentPreRender(instance, next);
+                }
                 const { proxy } = instance;
                 // 调用组件内部的 render 函数(用户传入的 render 函数)
                 // 把 render 函数的 this 修改为代理对象
@@ -777,6 +827,11 @@ function createRenderer(options) {
     return {
         createApp: createAppAPI(render),
     };
+}
+function updateComponentPreRender(instance, nextVNode) {
+    instance.vnode = nextVNode;
+    instance.next = null;
+    instance.props = nextVNode.props;
 }
 function getSequence(arr) {
     const p = arr.slice();
