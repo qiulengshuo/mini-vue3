@@ -474,6 +474,34 @@ function shouldUpdateComponent(prevVNode, nextVNode) {
     return false;
 }
 
+const queue = [];
+const p = Promise.resolve();
+// 避免产生多余的 resolve 回调函数，push 进队列，只需要 then 一次。
+let isFlushPending = false;
+// 开发时候用的 nextTick，可传入，可 await 等待。
+function nextTick(fn) {
+    return fn ? p.then(fn) : p;
+}
+function queueJobs(job) {
+    if (!queue.includes(job)) {
+        queue.push(job);
+    }
+    queueFlush();
+}
+function queueFlush() {
+    if (isFlushPending)
+        return;
+    isFlushPending = true;
+    nextTick(flushJobs);
+}
+function flushJobs() {
+    isFlushPending = false;
+    let job;
+    while ((job = queue.shift())) {
+        job && job();
+    }
+}
+
 function createRenderer(options) {
     const { createElement: hostCreateElement, patchProp: hostPatchProp, insert: hostInsert, remove: hostRemove, setElementText: hostSetElementText, } = options;
     function render(vnode, container) {
@@ -822,6 +850,11 @@ function createRenderer(options) {
                 // vnode -> DOM
                 patch(prevSubTree, subTree, container, instance, anchor);
             }
+        }, {
+            scheduler() {
+                console.log("scheduler");
+                queueJobs(instance.update);
+            }
         });
     }
     return {
@@ -919,4 +952,4 @@ function createApp(...args) {
     return renderer.createApp(...args);
 }
 
-export { createApp, createRenderer, createTextVNode, getCurrentInstance, h, inject, provide, proxyRefs, ref, renderSlots };
+export { createApp, createRenderer, createTextVNode, getCurrentInstance, h, inject, nextTick, provide, proxyRefs, ref, renderSlots };
