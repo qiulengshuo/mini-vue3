@@ -401,7 +401,7 @@ export function createRenderer(options) {
         const { proxy } = instance
         // 调用组件内部的 render 函数(用户传入的 render 函数)
         // 把 render 函数的 this 修改为代理对象
-        const subTree = (instance.subTree = instance.render.call(proxy))
+        const subTree = (instance.subTree = instance.render.call(proxy, proxy))
         // vnode -> DOM
         patch(null, subTree, container, instance, anchor)
         initialVnode.el = subTree.el
@@ -420,7 +420,7 @@ export function createRenderer(options) {
         const { proxy } = instance
         // 调用组件内部的 render 函数(用户传入的 render 函数)
         // 把 render 函数的 this 修改为代理对象
-        const subTree = instance.render.call(proxy)
+        const subTree = instance.render.call(proxy, proxy)
         const prevSubTree = instance.subTree
         instance.subTree = subTree
 

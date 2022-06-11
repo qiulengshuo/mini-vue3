@@ -13,7 +13,13 @@ export function transform(root, options = {}) {
 }
 
 function createRootCodegen(root) {
-  root.codegenNode = root.children[0]
+  const child = root.children[0]
+  // 如果 child 是 element 会把 codegen 开始遍历节点 放到 child 改进的 codegenNode。
+  if (child.type === NodeTypes.ELEMENT) {
+    root.codegenNode = child.codegenNode
+  } else {
+    root.codegenNode = root.children[0]
+  }
 }
 
 function createTransformContext(root, options) {
@@ -31,9 +37,12 @@ function createTransformContext(root, options) {
 function traverseNode(node, context) {
   // 把每个节点传入到插件函数中
   const nodeTransforms = context.nodeTransforms
+  const exitFns: any = []
   for (let i = 0; i < nodeTransforms.length; i++) {
     const transform = nodeTransforms[i]
-    transform(node)
+    // 执行 transformExpression 保存 transformElement transformText
+    const onExit = transform(node, context)
+    if (onExit) exitFns.push(onExit)
   }
 
   // 对三种类型进行处理
@@ -47,6 +56,14 @@ function traverseNode(node, context) {
       break
     default:
       break
+  }
+
+  // 等到 node 所有 children 节点遍历一遍，transform 了一遍。
+  // 再去 transformText 合并text和interpolation
+  // 最后 transformElement 添加 element node 的 codegenNode
+  let i = exitFns.length
+  while (i--) {
+    exitFns[i]()
   }
 }
 // 遍历children dfs
