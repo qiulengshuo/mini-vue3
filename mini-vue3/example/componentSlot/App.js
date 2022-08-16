@@ -6,7 +6,7 @@ export const App = {
   name: "App",
   render () {
     const app = h("div", {}, "App")
-    // object key
+    // 3.object key
     const foo = h(
       Foo,
       {},
@@ -18,7 +18,9 @@ export const App = {
         footer: () => h("p", {}, "footer"),
       }
     )
-    // 数组 vnode
+    // 1.数组
+    // const foo = h(Foo, {}, [h("p", {}, "123")]);
+    // 2.vnode
     // const foo = h(Foo, {}, h("p", {}, "123"));
     return h("div", {}, [app, foo])
   },

@@ -24,8 +24,8 @@ export const Foo = {
     // 2. 父组件通过函数参数对象获取到数据。
 
     // 三种插槽
-    // 父组件 包含插槽函数的对象
-    // 子组件 renderSlots()
+    // 父组件 包含插槽函数的对象 | vnode | 数组
+    // 子组件 [renderSlots()]
     const age = 18
     return h("div", {}, [
       // renderSlots() 返回 vnode 或 div 包含着的 vnode 数组
